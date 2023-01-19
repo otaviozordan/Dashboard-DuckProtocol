@@ -13,8 +13,12 @@ namespace Monitor_CAN
 {
     public partial class Form1 : Form
     {
-        byte[] ReceivedMessage;
-        int intRecivedMessage;
+        byte[] Recive;
+        int ReciveInt;
+
+        //1byte start, 4bytes id do tx, 4bytes id do rx, 8bytes de data (uma variavel doble) e 1 byte endFrame 
+        int lenghFrame;
+        byte[] Frame;
 
         public Form1()
         {
@@ -80,16 +84,20 @@ namespace Monitor_CAN
                     serialPort1.Parity = Parity.None;
                     serialPort1.StopBits = StopBits.One;
                     serialPort1.DataBits = 8;
-                    serialPort1.ReceivedBytesThreshold = 9;
                     serialPort1.RtsEnable = true;
                     serialPort1.DtrEnable = true;
                     serialPort1.Handshake = System.IO.Ports.Handshake.XOnXOff;
-                    serialPort1.DataReceived += port_DataReceived;
-                    serialPort1.Open();
+                    serialPort1.DataReceived += new SerialDataReceivedEventHandler(MyDataReceivedHandler);
 
+                    //Tamanho do buffer e quando disparar DataReciverd
+                    serialPort1.ReadBufferSize = 2800; //200 bytes
+                    serialPort1.ReceivedBytesThreshold = lenghFrame; 
+                    serialPort1.Open();
+                    
                 }
-                catch
+                catch(Exception ex)
                 {
+                    MessageBox.Show("Error opening/writing to serial port :: " + ex.Message, "Error!");
                     return;
 
                 }
@@ -129,33 +137,59 @@ namespace Monitor_CAN
                 serialPort1.Write(textBoxEnviar.Text);  //envia o texto presente no textbox Enviar
         }
 
-        private void port_DataReceived(object sender, SerialDataReceivedEventArgs e)
-        {
-            int intbytes = serialPort1.BytesToRead;
-            byte[] buffer = new byte[intbytes];
-            serialPort1.Read(buffer, 0, intbytes);
-
-            for (int i=0; i<intbytes; i++) {
-                if (buffer[i] == 1)
-                {
-
-                }
-            }
-
-            ReceivedMessage = new byte[intbytes];  //create an array of the same size
-            Array.Copy(buffer, ReceivedMessage, intbytes);  //copy it across
-
-            this.Invoke(new EventHandler(DoUpDate));
-        }
-
-        private void DoUpDate(object s, EventArgs e)
-        {
-            textBoxReceber.AppendText(System.Text.Encoding.ASCII.GetString(ReceivedMessage));
-        }
-
         private void btnClear_Click(object sender, EventArgs e)
         {
             textBoxReceber.Text = "";
         }
+
+        private void btnExcluirRec_Click(object sender, EventArgs e)
+        {
+            textBoxEnviar.Text = "";
+        }
+
+        void MyDataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
+        {   
+            int count = serialPort1.BytesToRead;
+            byte[] ByteArray = new byte[count];
+            serialPort1.Read(ByteArray, 0, count);
+
+            for(int i = 0; i<count; i++)
+            {
+                Recive.Append(ByteArray[i]);
+            }
+            ReciveInt = ReciveInt+count;
+
+            InicioFrame();
+        }
+
+        void InicioFrame()
+        {
+            for (int i = 0; i < lenghFrame; i++) {
+                if (Recive[i] == 83) //Procura um S
+                {
+                    Frame = Recive.Skip(i).ToArray();
+                    ReciveInt = Recive.Length;
+                    FormarCorpo();
+                    break;
+                }
+            }
+
+        }
+
+        void FormarCorpo()
+        {
+            for (int i = 0; i < lenghFrame; i++)
+            {
+                Frame.Append(Recive[i]);
+                if (Recive[i] == 84) //Procura um T
+                {
+                    //Final do frame enocntrado
+                    Frame = Recive.Skip(i).ToArray(); //Elimina da Array o trecho verificado
+                    ReciveInt = Recive.Length;
+                    break;
+                }
+            }
+        }
+
     }
 }
