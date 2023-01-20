@@ -13,12 +13,10 @@ namespace Monitor_CAN
 {
     public partial class Form1 : Form
     {
-        byte[] Recive;
-        int ReciveInt;
+        String Frame;
 
-        //1byte start, 4bytes id do tx, 4bytes id do rx, 8bytes de data (uma variavel doble) e 1 byte endFrame 
-        int lenghFrame;
-        byte[] Frame;
+        //Variavel para discarte de pacotes incompletos
+        String Trash;
 
         public Form1()
         {
@@ -90,8 +88,8 @@ namespace Monitor_CAN
                     serialPort1.DataReceived += new SerialDataReceivedEventHandler(MyDataReceivedHandler);
 
                     //Tamanho do buffer e quando disparar DataReciverd
-                    serialPort1.ReadBufferSize = 2800; //200 bytes
-                    serialPort1.ReceivedBytesThreshold = lenghFrame; 
+                    serialPort1.ReadBufferSize = 8000; //1000 bytes
+                    serialPort1.ReceivedBytesThreshold = 1; 
                     serialPort1.Open();
                     
                 }
@@ -137,59 +135,218 @@ namespace Monitor_CAN
                 serialPort1.Write(textBoxEnviar.Text);  //envia o texto presente no textbox Enviar
         }
 
-        private void btnClear_Click(object sender, EventArgs e)
-        {
-            textBoxReceber.Text = "";
-        }
-
         private void btnExcluirRec_Click(object sender, EventArgs e)
         {
             textBoxEnviar.Text = "";
         }
 
         void MyDataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
-        {   
-            int count = serialPort1.BytesToRead;
-            byte[] ByteArray = new byte[count];
-            serialPort1.Read(ByteArray, 0, count);
+        {
+            Trash = serialPort1.ReadTo("preamble");
+            Frame = serialPort1.ReadTo("endFrame");
 
-            for(int i = 0; i<count; i++)
-            {
-                Recive.Append(ByteArray[i]);
-            }
-            ReciveInt = ReciveInt+count;
-
-            InicioFrame();
+            this.Invoke(new EventHandler(tratarDados));
         }
 
-        void InicioFrame()
+        public class dataRecive
         {
-            for (int i = 0; i < lenghFrame; i++) {
-                if (Recive[i] == 83) //Procura um S
+            public string idRx { get; set; }
+            public string idTx { get; set; }
+            public string data { get; set; }
+            public dataRecive(string _idRx, string _idTx, string _data)
+            {
+                _idRx = idRx;
+                _idTx = idTx;
+                _data = data;
+            }
+        }
+
+        private void tratarDados(object s, EventArgs e)
+        {
+            string idRx = null;
+            string idTx = null;
+            string data = null;
+
+            // frame --> preamble/idRx/idTx/datadata/endFrame
+            string decompFrame = Frame;
+            int n = decompFrame.Length;
+
+            /*
+             * Não implementado -> Pacote dinamico
+            if (true /*decompFrame[0].Equals("/"))
+            {
+                textBoxRec.AppendText("Pacote intacto\n");
+                for (int i = 1; i < n; i++)
                 {
-                    Frame = Recive.Skip(i).ToArray();
-                    ReciveInt = Recive.Length;
-                    FormarCorpo();
-                    break;
+                    if (decompFrame[i] == "/")
+                    {
+                        textBoxRec.Text = "Brake\n";
+                        break;
+                    }
+
+                    idRx += decompFrame[i];
                 }
             }
-
-        }
-
-        void FormarCorpo()
-        {
-            for (int i = 0; i < lenghFrame; i++)
+            else
             {
-                Frame.Append(Recive[i]);
-                if (Recive[i] == 84) //Procura um T
-                {
-                    //Final do frame enocntrado
-                    Frame = Recive.Skip(i).ToArray(); //Elimina da Array o trecho verificado
-                    ReciveInt = Recive.Length;
-                    break;
-                }
+                decompFrame = "Pacote corrompido";
+                textBoxRec.AppendText("Pacote corrompido\n");
             }
+            */
+
+            if (n != 20)
+            {
+                MessageBox.Show("Pacote incorreto");
+            }
+            for (int i = 1; i < n; i++)
+            {
+                if (0<i && i<5)
+                {
+                    idRx += decompFrame[i];
+                }
+                if (5 < i && i < 10)
+                {
+                    idTx += decompFrame[i];
+                }
+                if (10 < i && i < 19)
+                {
+                    data += decompFrame[i];
+                }
+            
+            }
+            textBoxRec.AppendText("Frame recebido: idRx:");
+            textBoxRec.AppendText(idRx + " idTx:");
+            textBoxRec.AppendText(idTx + " Data:");
+            textBoxRec.AppendText(data + "\n");
         }
 
+        void prepararPayload(string destino, string data)
+        {
+            string payload;
+            string meuId = textoBox_meuId.Text;
+
+            // frame --> preamble/idRx/idTx/datadata/endFrame
+            payload = "preamble/" + destino + 
+        }
+
+        private void OnOff1_Click(object sender, EventArgs e)
+        {
+            if(OnOff1.Text == "Acionado")
+            {
+                OnOff1.Text = "Desacionado";
+                OnOff1.BackColor = Color.Red;
+            }
+            else if (OnOff1.Text == "Desacionado")
+            {
+                OnOff1.Text = "Acionado";
+                OnOff1.BackColor = Color.LimeGreen;
+            }
+            else //Primeiro Acionamento
+            {
+                OnOff1.Text = "Acionado";
+                OnOff1.BackColor = Color.LimeGreen;
+            }
+
+            string comando;
+            if (OnOff1.Text == "Acionado")
+            {
+                comando = "enable";
+            }
+            else
+            {
+                comando = "disabled";
+            }
+            prepararPayload(destino1.Text, comando);
+        }
+
+        private void OnOff2_Click(object sender, EventArgs e)
+        {
+            if (OnOff2.Text == "Acionado")
+            {
+                OnOff2.Text = "Desacionado";
+                OnOff2.BackColor = Color.Red;
+            }
+            else if (OnOff2.Text == "Desacionado")
+            {
+                OnOff2.Text = "Acionado";
+                OnOff2.BackColor = Color.LimeGreen;
+            }
+            else //Primeiro Acionamento
+            {
+                OnOff2.Text = "Acionado";
+                OnOff2.BackColor = Color.LimeGreen;
+            }
+
+            string comando;
+            if (OnOff2.Text == "Acionado")
+            {
+                comando = "enable";
+            }
+            else
+            {
+                comando = "disabled";
+            }
+            prepararPayload(destino2.Text, comando);
+        }
+
+        private void OnOff3_Click(object sender, EventArgs e)
+        {
+            if (OnOff3.Text == "Acionado")
+            {
+                OnOff3.Text = "Desacionado";
+                OnOff3.BackColor = Color.Red;
+            }
+            else if (OnOff3.Text == "Desacionado")
+            {
+                OnOff3.Text = "Acionado";
+                OnOff3.BackColor = Color.LimeGreen;
+            }
+            else //Primeiro Acionamento
+            {
+                OnOff3.Text = "Acionado";
+                OnOff3.BackColor = Color.LimeGreen;
+            }
+
+            string comando;
+            if (OnOff3.Text == "Acionado")
+            {
+                comando = "enable";
+            }
+            else
+            {
+                comando = "disabled";
+            }
+            prepararPayload(destino3.Text, comando);
+        }
+
+        private void OnOff4_Click(object sender, EventArgs e)
+        {
+            if (OnOff4.Text == "Acionado")
+            {
+                OnOff4.Text = "Desacionado";
+                OnOff4.BackColor = Color.Red;
+            }
+            else if (OnOff4.Text == "Desacionado")
+            {
+                OnOff4.Text = "Acionado";
+                OnOff4.BackColor = Color.LimeGreen;
+            }
+            else //Primeiro Acionamento
+            {
+                OnOff4.Text = "Acionado";
+                OnOff4.BackColor = Color.LimeGreen;
+            }
+
+            string comando;
+            if (OnOff4.Text == "Acionado")
+            {
+                comando = "enable";
+            }
+            else
+            {
+                comando = "disabled";
+            }
+            prepararPayload(destino4.Text, comando);
+        }
     }
 }
