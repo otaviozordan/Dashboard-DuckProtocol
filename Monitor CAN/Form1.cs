@@ -163,8 +163,8 @@ namespace Monitor_CAN
 
         private void tratarDados(object s, EventArgs e)
         {
-            string idRx = null;
-            string idTx = null;
+            string idRec = null;
+            string idTras = null;
             string data = null;
 
             // frame --> preamble/idRx/idTx/datadata/endFrame
@@ -196,17 +196,18 @@ namespace Monitor_CAN
 
             if (n != 20)
             {
-                MessageBox.Show("Pacote incorreto");
+                MessageBox.Show("Pacote incorreto recebido");
+                MessageBox.Show(Frame);
             }
             for (int i = 1; i < n; i++)
             {
                 if (0<i && i<5)
                 {
-                    idRx += decompFrame[i];
+                    idRec += decompFrame[i];
                 }
                 if (5 < i && i < 10)
                 {
-                    idTx += decompFrame[i];
+                    idTras += decompFrame[i];
                 }
                 if (10 < i && i < 19)
                 {
@@ -214,10 +215,62 @@ namespace Monitor_CAN
                 }
             
             }
-            textBoxRec.AppendText("Frame recebido: idRx:");
-            textBoxRec.AppendText(idRx + " idTx:");
-            textBoxRec.AppendText(idTx + " Data:");
-            textBoxRec.AppendText(data + "\n");
+            textBoxPrompt.AppendText("\n Frame recebido de: " + idTras + " ---> ");
+            textBoxPrompt.AppendText(idRec);
+            textBoxPrompt.AppendText(idTras);
+            textBoxPrompt.AppendText(data);
+            textBoxPrompt.AppendText("\t \n");
+
+            if(string.Compare(idRec, textoBox_meuId.Text) == 0)
+            {
+                atualizarPagina(data, idTras);
+            }
+        }
+
+        void atualizarPagina(string data, string  idTx)
+        {
+            switch (data)
+            {
+                case "ind1-Act":
+                    Indicador1.Text = "Ativo\n" + idTx;
+                    Indicador1.BackColor = Color.LimeGreen;
+                    break;
+                case "ind1-Dea":
+                    Indicador1.Text = "Inativo\n" + idTx;
+                    Indicador1.BackColor = Color.Red;
+                    break;
+
+                case "ind2-Act":
+                    Indicador2.Text = "Ativo\n" + idTx;
+                    Indicador2.BackColor = Color.LimeGreen;
+                    break;
+                case "ind2-Dea":
+                    Indicador2.Text = "Inativo\n" + idTx;
+                    Indicador2.BackColor = Color.Red;
+                    break;
+
+                case "ind3-Act":
+                    Indicador3.Text = "Ativo\n" + idTx;
+                    Indicador3.BackColor = Color.LimeGreen;
+                    break;
+                case "ind3-Dea":
+                    Indicador3.Text = "Inativo\n" + idTx;
+                    Indicador3.BackColor = Color.Red;
+                    break;
+
+                case "ind4-Act":
+                    Indicador4.Text = "Ativo\n" + idTx;
+                    Indicador4.BackColor = Color.LimeGreen;
+                    break;
+                case "ind4-Dea":
+                    Indicador4.Text = "Inativo\n" + idTx;
+                    Indicador4.BackColor = Color.Red;
+                    break;
+
+                default:
+                    MessageBox.Show("Comando não reconhecido");
+                    break;
+            }
         }
 
         void prepararPayload(string destino, string data)
@@ -225,8 +278,55 @@ namespace Monitor_CAN
             string payload;
             string meuId = textoBox_meuId.Text;
 
+            if(destino.Length > 4)
+            {
+                MessageBox.Show("Endereço de destino ultrapassou 4 characteres");
+                return;
+            }
+
+            if (meuId.Length > 4)
+            {
+                MessageBox.Show("Seu endereço ultrapassou 4 characteres");
+                return;
+            }
+
+            if (data.Length > 8)
+            {
+                MessageBox.Show("Seu pacote ultrapassou 4 characteres");
+                return;
+            }
+
+            if (destino.Length == 0)
+            {
+                MessageBox.Show("Endereço de destino esta vazio");
+                return;
+            }
+
+            if (meuId.Length == 0)
+            {
+                MessageBox.Show("Seu endereço esta vazio");
+                return;
+            }
+
+            if (data.Length == 0)
+            {
+                MessageBox.Show("Seu pacote esta vazio");
+                return;
+            }
+
+            if (string.Compare(meuId, destino) == 0)
+            {
+                MessageBox.Show("Seu id é igual ao id do destino");
+                return;
+            }
+
             // frame --> preamble/idRx/idTx/datadata/endFrame
-            payload = "preamble/" + destino + 
+            payload = "preamble/" + destino + "/" + meuId + "/" + data + "/endFrame";
+
+            serialPort1.Write(payload);
+
+            textBoxPrompt.AppendText("\n" + "Envinado payload: " + payload);
+
         }
 
         private void OnOff1_Click(object sender, EventArgs e)
@@ -347,6 +447,26 @@ namespace Monitor_CAN
                 comando = "disabled";
             }
             prepararPayload(destino4.Text, comando);
+        }
+
+        private void Indicador1_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/"+ textoBox_meuId.Text + "/ind1-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ "+ textoBox_meuId.Text + " / ind1-Dea / endFrame");
+        }
+
+        private void Indicador2_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/" + textoBox_meuId.Text + "/ind2-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ " + textoBox_meuId.Text + " / ind2-Dea / endFrame");
+        }
+
+        private void Indicador3_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/" + textoBox_meuId.Text + "/ind3-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ " + textoBox_meuId.Text + " / ind3-Dea / endFrame");
+        }
+
+        private void Indicador4_Click(object sender, EventArgs e)
+        {
+            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/" + textoBox_meuId.Text + "/ind4-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ " + textoBox_meuId.Text + " / ind4-Dea / endFrame");
         }
     }
 }
