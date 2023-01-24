@@ -7,21 +7,29 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Threading;
+using System.Globalization;
 using System.IO.Ports;  // necessário para ter acesso as portas
 
 namespace Monitor_CAN
 {
     public partial class Form1 : Form
     {
-        String Frame;
-
-        //Variavel para discarte de pacotes incompletos
-        String Trash;
+        byte[] frame = new byte[3];
 
         public Form1()
         {
             InitializeComponent();
             timerCOM.Enabled = true;
+
+            comboBoxId1.Text = "0x10";
+            comboBoxId2.Text = "0x10";
+            comboBoxId3.Text = "0x10";
+            comboBoxId4.Text = "0x10";
+            comboBoxIdInd1.Text = "0x10";
+            comboBoxIdInd2.Text = "0x10";
+            comboBoxIdInd3.Text = "0x10";
+            comboBoxIdInd4.Text = "0x10";
         }
 
         private void atualizaListaCOMs()
@@ -131,342 +139,261 @@ namespace Monitor_CAN
 
         private void btEnviar_Click(object sender, EventArgs e)
         {
-            if (serialPort1.IsOpen == true)          //porta está aberta
-                serialPort1.Write(textBoxEnviar.Text);  //envia o texto presente no textbox Enviar
+            if (serialPort1.IsOpen == true) //Porta está aberta
+            {
+                byte id, end, data;
+                id = pegarValorHexTextBox(textBoxEnviarId);
+                end = pegarValorHexTextBox(textBoxEnviarEnd);
+                data = pegarValorHexTextBox(textBoxEnviarData);
+                enviarPayload(id, end, data);
+            }
         }
 
         private void btnExcluirRec_Click(object sender, EventArgs e)
         {
-            textBoxEnviar.Text = "";
-        }
-
-        void MyDataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
-        {
-            Trash = serialPort1.ReadTo("preamble");
-            Frame = serialPort1.ReadTo("endFrame");
-
-            this.Invoke(new EventHandler(tratarDados));
-        }
-
-        public class dataRecive
-        {
-            public string idRx { get; set; }
-            public string idTx { get; set; }
-            public string data { get; set; }
-            public dataRecive(string _idRx, string _idTx, string _data)
-            {
-                _idRx = idRx;
-                _idTx = idTx;
-                _data = data;
-            }
-        }
-
-        private void tratarDados(object s, EventArgs e)
-        {
-            string idRec = null;
-            string idTras = null;
-            string data = null;
-
-            // frame --> preamble/idRx/idTx/datadata/endFrame
-            string decompFrame = Frame;
-            int n = decompFrame.Length;
-
-            /*
-             * Não implementado -> Pacote dinamico
-            if (true /*decompFrame[0].Equals("/"))
-            {
-                textBoxRec.AppendText("Pacote intacto\n");
-                for (int i = 1; i < n; i++)
-                {
-                    if (decompFrame[i] == "/")
-                    {
-                        textBoxRec.Text = "Brake\n";
-                        break;
-                    }
-
-                    idRx += decompFrame[i];
-                }
-            }
-            else
-            {
-                decompFrame = "Pacote corrompido";
-                textBoxRec.AppendText("Pacote corrompido\n");
-            }
-            */
-
-            if (n != 20)
-            {
-                MessageBox.Show("Pacote incorreto recebido");
-                MessageBox.Show(Frame);
-            }
-            for (int i = 1; i < n; i++)
-            {
-                if (0<i && i<5)
-                {
-                    idRec += decompFrame[i];
-                }
-                if (5 < i && i < 10)
-                {
-                    idTras += decompFrame[i];
-                }
-                if (10 < i && i < 19)
-                {
-                    data += decompFrame[i];
-                }
-            
-            }
-            textBoxPrompt.AppendText("\n Frame recebido de: " + idTras + " ---> ");
-            textBoxPrompt.AppendText(idRec);
-            textBoxPrompt.AppendText(idTras);
-            textBoxPrompt.AppendText(data);
-            textBoxPrompt.AppendText("\t \n");
-
-            if(string.Compare(idRec, textoBox_meuId.Text) == 0)
-            {
-                atualizarPagina(data, idTras);
-            }
-        }
-
-        void atualizarPagina(string data, string  idTx)
-        {
-            switch (data)
-            {
-                case "ind1-Act":
-                    Indicador1.Text = "Ativo\n" + idTx;
-                    Indicador1.BackColor = Color.LimeGreen;
-                    break;
-                case "ind1-Dea":
-                    Indicador1.Text = "Inativo\n" + idTx;
-                    Indicador1.BackColor = Color.Red;
-                    break;
-
-                case "ind2-Act":
-                    Indicador2.Text = "Ativo\n" + idTx;
-                    Indicador2.BackColor = Color.LimeGreen;
-                    break;
-                case "ind2-Dea":
-                    Indicador2.Text = "Inativo\n" + idTx;
-                    Indicador2.BackColor = Color.Red;
-                    break;
-
-                case "ind3-Act":
-                    Indicador3.Text = "Ativo\n" + idTx;
-                    Indicador3.BackColor = Color.LimeGreen;
-                    break;
-                case "ind3-Dea":
-                    Indicador3.Text = "Inativo\n" + idTx;
-                    Indicador3.BackColor = Color.Red;
-                    break;
-
-                case "ind4-Act":
-                    Indicador4.Text = "Ativo\n" + idTx;
-                    Indicador4.BackColor = Color.LimeGreen;
-                    break;
-                case "ind4-Dea":
-                    Indicador4.Text = "Inativo\n" + idTx;
-                    Indicador4.BackColor = Color.Red;
-                    break;
-
-                default:
-                    MessageBox.Show("Comando não reconhecido");
-                    break;
-            }
-        }
-
-        void prepararPayload(string destino, string data)
-        {
-            string payload;
-            string meuId = textoBox_meuId.Text;
-
-            if(destino.Length > 4)
-            {
-                MessageBox.Show("Endereço de destino ultrapassou 4 characteres");
-                return;
-            }
-
-            if (meuId.Length > 4)
-            {
-                MessageBox.Show("Seu endereço ultrapassou 4 characteres");
-                return;
-            }
-
-            if (data.Length > 8)
-            {
-                MessageBox.Show("Seu pacote ultrapassou 4 characteres");
-                return;
-            }
-
-            if (destino.Length == 0)
-            {
-                MessageBox.Show("Endereço de destino esta vazio");
-                return;
-            }
-
-            if (meuId.Length == 0)
-            {
-                MessageBox.Show("Seu endereço esta vazio");
-                return;
-            }
-
-            if (data.Length == 0)
-            {
-                MessageBox.Show("Seu pacote esta vazio");
-                return;
-            }
-
-            if (string.Compare(meuId, destino) == 0)
-            {
-                MessageBox.Show("Seu id é igual ao id do destino");
-                return;
-            }
-
-            // frame --> preamble/idRx/idTx/datadata/endFrame
-            payload = "preamble/" + destino + "/" + meuId + "/" + data + "/endFrame";
-
-            serialPort1.Write(payload);
-
-            textBoxPrompt.AppendText("\n" + "Envinado payload: " + payload);
-
+            textBoxPrompt.Text = "";
         }
 
         private void OnOff1_Click(object sender, EventArgs e)
         {
+            byte data = 0x3d; //Acionamento data 13
             if(OnOff1.Text == "Acionado")
             {
                 OnOff1.Text = "Desacionado";
                 OnOff1.BackColor = Color.Red;
-            }
-            else if (OnOff1.Text == "Desacionado")
-            {
-                OnOff1.Text = "Acionado";
-                OnOff1.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb0, data);
             }
             else //Primeiro Acionamento
             {
                 OnOff1.Text = "Acionado";
                 OnOff1.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb1, data);
             }
-
-            string comando;
-            if (OnOff1.Text == "Acionado")
-            {
-                comando = "enable";
-            }
-            else
-            {
-                comando = "disabled";
-            }
-            prepararPayload(destino1.Text, comando);
         }
 
         private void OnOff2_Click(object sender, EventArgs e)
         {
+            byte data = 0x3c; //Acionamento data 12
             if (OnOff2.Text == "Acionado")
             {
                 OnOff2.Text = "Desacionado";
                 OnOff2.BackColor = Color.Red;
-            }
-            else if (OnOff2.Text == "Desacionado")
-            {
-                OnOff2.Text = "Acionado";
-                OnOff2.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb0, data);
             }
             else //Primeiro Acionamento
             {
                 OnOff2.Text = "Acionado";
                 OnOff2.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb1, data);
             }
-
-            string comando;
-            if (OnOff2.Text == "Acionado")
-            {
-                comando = "enable";
-            }
-            else
-            {
-                comando = "disabled";
-            }
-            prepararPayload(destino2.Text, comando);
         }
 
         private void OnOff3_Click(object sender, EventArgs e)
         {
+            byte data = 0x3b; //Acionamento data 11
             if (OnOff3.Text == "Acionado")
             {
                 OnOff3.Text = "Desacionado";
                 OnOff3.BackColor = Color.Red;
-            }
-            else if (OnOff3.Text == "Desacionado")
-            {
-                OnOff3.Text = "Acionado";
-                OnOff3.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb0, data);
             }
             else //Primeiro Acionamento
             {
                 OnOff3.Text = "Acionado";
                 OnOff3.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb1, data);
             }
-
-            string comando;
-            if (OnOff3.Text == "Acionado")
-            {
-                comando = "enable";
-            }
-            else
-            {
-                comando = "disabled";
-            }
-            prepararPayload(destino3.Text, comando);
         }
 
         private void OnOff4_Click(object sender, EventArgs e)
         {
+
+            byte data = 0x3a; //Acionamento data 10
             if (OnOff4.Text == "Acionado")
             {
                 OnOff4.Text = "Desacionado";
                 OnOff4.BackColor = Color.Red;
-            }
-            else if (OnOff4.Text == "Desacionado")
-            {
-                OnOff4.Text = "Acionado";
-                OnOff4.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb0, data);
             }
             else //Primeiro Acionamento
             {
                 OnOff4.Text = "Acionado";
                 OnOff4.BackColor = Color.LimeGreen;
+                enviarPayload(pegarValorHexCombo(comboBoxId1), 0xb1, data);
             }
+        }
 
-            string comando;
-            if (OnOff4.Text == "Acionado")
+        private void btnRefresh_Click(object sender, EventArgs e)
+        {
+            if (btnRefresh.Text == "Ativar Busca" && serialPort1.IsOpen)
             {
-                comando = "enable";
+                btnRefresh.BackColor = Color.LimeGreen;
+                timerBusca.Enabled = true;
+                btnRefresh.Text = "Desativar Busca";
             }
             else
             {
-                comando = "disabled";
+                btnRefresh.BackColor = Color.White;
+                timerBusca.Enabled = false;
+                btnRefresh.Text = "Ativar Busca";
+                if (!serialPort1.IsOpen)
+                {
+                   MessageBox.Show("Porta COM fechada.");
+                }
             }
-            prepararPayload(destino4.Text, comando);
         }
 
-        private void Indicador1_Click(object sender, EventArgs e)
+        private void timerBusca_Tick(object sender, EventArgs e)
         {
-            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/"+ textoBox_meuId.Text + "/ind1-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ "+ textoBox_meuId.Text + " / ind1-Dea / endFrame");
+            solicitarValores();
         }
 
-        private void Indicador2_Click(object sender, EventArgs e)
+        private void solicitarValores()
         {
-            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/" + textoBox_meuId.Text + "/ind2-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ " + textoBox_meuId.Text + " / ind2-Dea / endFrame");
+            timerBusca.Enabled = false;
+
+            byte idS1 = pegarValorHexCombo(comboBoxIdInd1);
+            byte idS2 = pegarValorHexCombo(comboBoxIdInd2);
+            byte idS3 = pegarValorHexCombo(comboBoxIdInd3);
+            byte idS4 = pegarValorHexCombo(comboBoxIdInd4);
+
+            byte[] lastFrame = new byte[3];
+            lastFrame = frame;
+
+            const int timeResponse = 1000;
+
+            Task.Run(async () =>
+            {
+                //Dispara primeira request
+                enviarPayload(idS1, 0xb2, 0x39);
+                //Espera resposta
+                await Task.Delay(timeResponse);
+                if(frame[0] == 0x0f && lastFrame != frame)
+                {
+                    atualizarIndicador(Indicador1, frame);
+                }
+
+                //Dispara segunda request
+                enviarPayload(idS2, 0xb2, 0x38);
+                //Espera resposta
+                await Task.Delay(timeResponse);
+                if (frame[0] == 0x0f && lastFrame != frame)
+                {
+                    atualizarIndicador(Indicador2, frame);
+                }
+
+                //Dispara terceira request
+                enviarPayload(idS3, 0xb2, 0x37);
+                //Espera resposta
+                await Task.Delay(timeResponse);
+                if (frame[0] == 0x0f && lastFrame != frame)
+                {
+                    atualizarIndicador(Indicador3, frame);
+                }
+
+                //Dispara qaurta request
+                enviarPayload(idS4, 0xb2, 0x36);
+                //Espera resposta
+                await Task.Delay(timeResponse);
+                if (frame[0] == 0x0f && lastFrame != frame)
+                {
+                    atualizarIndicador(Indicador4, frame);
+                }
+
+            });
+            timerBusca.Enabled = true;
         }
 
-        private void Indicador3_Click(object sender, EventArgs e)
+        private void atualizarIndicador(Button indicador, byte[] frame)
         {
-            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/" + textoBox_meuId.Text + "/ind3-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ " + textoBox_meuId.Text + " / ind3-Dea / endFrame");
+            if (frame[1] == 0xb3)
+            {
+                if (frame[2] == 0x31)
+                {
+                    indicador.Text = "ON";
+                    indicador.BackColor = Color.LimeGreen;
+                }
+                else if (frame[2] == 0x30)
+                {
+                    indicador.Text = "OFF";
+                    indicador.BackColor = Color.Red;
+                }
+                else
+                {
+                    indicador.Text = "Indefinido";
+                    indicador.BackColor = Color.White;
+                }
+            }
         }
 
-        private void Indicador4_Click(object sender, EventArgs e)
+        public byte pegarValorHexCombo(ComboBox combo)
         {
-            MessageBox.Show("Para ativar/desativar use:\n preamble/<Id de quem está enviando>/" + textoBox_meuId.Text + "/ind4-Act/endFrame" + "\n preamble /< Id de quem está enviando >/ " + textoBox_meuId.Text + " / ind4-Dea / endFrame");
+            String hex = combo.Text;
+            byte b = Convert.ToByte(hex, 16); // 15;
+            return b;
+        }
+
+        public byte pegarValorHexTextBox(TextBox box)
+        {
+            String hex = box.Text;
+            byte b = Convert.ToByte(hex, 16); // 15;
+            return b;
+        }
+
+        private void enviarPayload(byte id, byte end, byte data)
+        {
+            byte[] payload = new byte[5];
+
+            //Payload --> 0x02 + id + end + val + 0x03
+            payload[0] = 0x02;
+            payload[1] = id;
+            payload[2] = end;
+            payload[3] = data;
+            payload[4] = 0x03;
+
+            if (serialPort1.IsOpen == true)
+            {
+                serialPort1.Write(payload, 0, 5);
+            }
+        }
+
+        void MyDataReceivedHandler(object sender, SerialDataReceivedEventArgs e)
+        {
+            byte buffer;
+            for (int i = 0; i < serialPort1.BytesToRead; i++)
+            {
+                buffer = (byte)serialPort1.ReadByte();
+                if (buffer == 0x02)
+                {
+                    break;
+                }
+            }
+            for (int i = 0; i < 3; i++)
+            {
+                buffer = (byte)serialPort1.ReadByte();
+                frame[i] = buffer;
+
+                if (buffer == 0x03)
+                {
+                    break;
+                }
+            }
+
+            this.Invoke(new EventHandler(tratarDados));
+        }
+
+        private void tratarDados(object s, EventArgs e)
+        {
+            if (frame.Length != 3)
+            {
+                textBoxPrompt.AppendText("Frame corrompido");
+            }
+            if (serialPort1.ReadByte() != 0x03)
+            {
+                textBoxPrompt.AppendText("Frame corrompido");
+            }
+
+            textBoxPrompt.AppendText("\n Recebido: " + Encoding.UTF8.GetString(frame));
         }
     }
 }
